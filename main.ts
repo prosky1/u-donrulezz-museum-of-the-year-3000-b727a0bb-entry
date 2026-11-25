@@ -1,43 +1,46 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+// Museum of the Year 3000 — single-line label emitter
+// Writes the exhibit label to the scorer's expected location.
 
-const TEXT = "Group chat, c. 2025. A room where twelve people talked at once and one person did all the work.";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 
-function fail(reason: string): never {
-  throw new Error(`museum label rejected: ${reason}`);
+const EXHIBIT_LABEL =
+  "Fidget spinner, c. 2025. For one summer every child on Earth owned one. No one knows why. The records end there.";
+
+const TARGET_PATH = "/output/entry.txt";
+const MAX_LABEL_CHARS = 200;
+
+function countVisibleCharacters(text: string): number {
+  return [...text].length;
 }
 
-function checkLabel(label: string): void {
-  if (label.length < 1 || label.length > 200) {
-    fail(`length ${label.length} outside 1-200`);
+function assertLabelFitsGate(candidate: string): void {
+  if (candidate.trim().length === 0) {
+    throw new Error("museum label must not be blank or whitespace-only");
   }
-  if (label.includes("\n") || label.includes("\r")) {
-    fail("label must be a single line");
+  const total = countVisibleCharacters(candidate);
+  if (total < 1 || total > MAX_LABEL_CHARS) {
+    throw new Error(`museum label length ${total} outside 1..${MAX_LABEL_CHARS}`);
   }
-  if (label.trim().length === 0) {
-    fail("label is only whitespace");
+  if (candidate.includes("\n") || candidate.includes("\r")) {
+    throw new Error("museum label must stay on one line");
   }
-  if (label !== label.trim()) {
-    fail("label must not start or end with whitespace");
-  }
-  for (let i = 0; i < label.length; i++) {
-    const code = label.charCodeAt(i);
-    if (code < 0x20 || code > 0x7e) {
-      fail(`character at ${i} is not printable ASCII`);
+  for (const ch of candidate) {
+    const code = ch.codePointAt(0) ?? 0;
+    if (code < 0x20 || code === 0x7f) {
+      throw new Error("museum label contains a control character");
     }
   }
-}
-
-function main(): void {
-  checkLabel(TEXT);
-  const outDir = process.env.MAKEFUN_OUTPUT_DIR ?? "/output";
-  mkdirSync(outDir, { recursive: true });
-  const target = join(outDir, "entry.txt");
-  writeFileSync(target, TEXT, "utf8");
-  const written = readFileSync(target, "utf8");
-  if (written !== TEXT) {
-    fail("entry.txt on disk does not match the label");
+  const roundTrip = Buffer.from(candidate, "utf8").toString("utf8");
+  if (roundTrip !== candidate) {
+    throw new Error("museum label failed UTF-8 round-trip check");
   }
 }
 
-main();
+function emitLabel(destination: string, payload: string): void {
+  mkdirSync(dirname(destination), { recursive: true });
+  writeFileSync(destination, payload, "utf8");
+}
+
+assertLabelFitsGate(EXHIBIT_LABEL);
+emitLabel(TARGET_PATH, EXHIBIT_LABEL);
